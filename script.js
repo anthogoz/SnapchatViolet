@@ -192,22 +192,35 @@ function render() {
                 ctx.shadowOffsetY = 0;
             }
         } else {
-            // Classic Band
-            const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
-            const fontSize = bandHeight * 0.6;
-            const yPos = item.y * (CANVAS_HEIGHT - bandHeight);
-
-            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-            ctx.fillRect(0, yPos, CANVAS_WIDTH, bandHeight);
-
+            // Text Band (Snapchat Style)
             if (item.text) {
-                ctx.fillStyle = "#ffffff";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.font = `${fontSize}px Arial, sans-serif`;
+                const fontSize = 38; // Slightly smaller for bands usually
+                ctx.font = `500 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
+
+                const metrics = getTextMetrics(ctx, item.text, fontSize);
+                const padding = 24;
+                const minHeight = CANVAS_HEIGHT * BAND_HEIGHT_RATIO;
+                const bandHeight = Math.max(minHeight, metrics.height + padding);
+
+                // Calculate Position
+                // y is 0..1 relative to available track.
+                // Track Height reduces as bandHeight increases.
+                const trackHeight = CANVAS_HEIGHT - bandHeight;
+                const yPos = item.y * trackHeight;
+
+                // Draw Semi-transparent Bar
+                ctx.fillStyle = "rgba(0, 0, 0, 0.55)"; // Classic Snap dark bar
+                ctx.fillRect(0, yPos, CANVAS_WIDTH, bandHeight);
+
+                // Draw Text Centered
+                const textY = yPos + bandHeight / 2;
+
+                // Shadow? Snap text has no shadow usually, just white on dark.
+                ctx.shadowColor = 'transparent';
+                ctx.fillStyle = "white";
 
                 // Use new Emoji Drawer
-                drawTextWithEmojis(ctx, item.text, CANVAS_WIDTH / 2, yPos + bandHeight / 2, fontSize);
+                drawTextWithEmojis(ctx, item.text, CANVAS_WIDTH / 2, textY, fontSize);
             }
         }
     });
@@ -343,21 +356,26 @@ async function startDeepFry() {
                     ctx.shadowOffsetY = 0;
                 }
             } else {
-                const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
-                const fontSize = bandHeight * 0.6;
-                const yPos = band.y * (CANVAS_HEIGHT - bandHeight);
-
-                ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-                ctx.fillRect(0, yPos, CANVAS_WIDTH, bandHeight);
-
+                // Band
                 if (band.text) {
-                    ctx.fillStyle = "#ffffff";
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.font = `${fontSize}px Arial, sans-serif`;
+                    const fontSize = 38;
+                    ctx.font = `500 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
 
-                    // Use new Emoji Drawer
-                    drawTextWithEmojis(ctx, band.text, CANVAS_WIDTH / 2, yPos + bandHeight / 2, fontSize);
+                    const metrics = getTextMetrics(ctx, band.text, fontSize);
+                    const padding = 24;
+                    const minHeight = CANVAS_HEIGHT * BAND_HEIGHT_RATIO;
+                    const bandHeight = Math.max(minHeight, metrics.height + padding);
+
+                    const trackHeight = CANVAS_HEIGHT - bandHeight;
+                    const yPos = band.y * trackHeight;
+
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+                    ctx.fillRect(0, yPos, CANVAS_WIDTH, bandHeight);
+
+                    const textY = yPos + bandHeight / 2;
+                    ctx.fillStyle = "white";
+
+                    drawTextWithEmojis(ctx, band.text, CANVAS_WIDTH / 2, textY, fontSize);
                 }
             }
         };
@@ -777,8 +795,19 @@ function handleMouseDown(e) {
             }
         } else {
             // Band Hit Test
-            const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
-            const bandYPx = band.y * (CANVAS_HEIGHT - bandHeight);
+            let bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
+            if (band.text) {
+                const fontSize = 38;
+                ctx.font = `500 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
+                const metrics = getTextMetrics(ctx, band.text, fontSize);
+                const padding = 24;
+                const minHeight = CANVAS_HEIGHT * BAND_HEIGHT_RATIO;
+                bandHeight = Math.max(minHeight, metrics.height + padding);
+            }
+
+            const trackHeight = CANVAS_HEIGHT - bandHeight;
+            const bandYPx = band.y * trackHeight;
+
             if (coords.y >= bandYPx && coords.y <= bandYPx + bandHeight) {
                 hitBand = band;
                 break;
@@ -883,8 +912,20 @@ function handleMouseMove(e) {
                     break;
                 }
             } else {
-                const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
-                const bandYPx = band.y * (CANVAS_HEIGHT - bandHeight);
+                // Band Hit Test
+                let bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
+                if (band.text) {
+                    const fontSize = 38;
+                    ctx.font = `500 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
+                    const metrics = getTextMetrics(ctx, band.text, fontSize);
+                    const padding = 24;
+                    const minHeight = CANVAS_HEIGHT * BAND_HEIGHT_RATIO;
+                    bandHeight = Math.max(minHeight, metrics.height + padding);
+                }
+
+                const trackHeight = CANVAS_HEIGHT - bandHeight;
+                const bandYPx = band.y * trackHeight;
+
                 if (coords.y >= bandYPx && coords.y <= bandYPx + bandHeight) {
                     canvas.style.cursor = 'ns-resize';
                     hover = true;
@@ -943,11 +984,23 @@ function handleMouseMove(e) {
                 band.y = Math.max(-0.1, Math.min(1.1, band.y));
             } else {
                 // Band Y only
-                const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
+                let bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
+                if (band.text) {
+                    const fontSize = 38;
+                    ctx.font = `500 ${fontSize}px "Helvetica Neue", Arial, sans-serif`;
+                    const metrics = getTextMetrics(ctx, band.text, fontSize);
+                    const padding = 24;
+                    const minHeight = CANVAS_HEIGHT * BAND_HEIGHT_RATIO;
+                    bandHeight = Math.max(minHeight, metrics.height + padding);
+                }
+
                 const trackHeight = CANVAS_HEIGHT - bandHeight;
-                let newY = dragInfo.initialY + (deltaY / trackHeight);
-                newY = Math.max(0, Math.min(1, newY));
-                band.y = newY;
+                // Avoid division by zero if canvas is tiny
+                if (trackHeight > 0) {
+                    let newY = dragInfo.initialY + (deltaY / trackHeight);
+                    newY = Math.max(0, Math.min(1, newY));
+                    band.y = newY;
+                }
             }
 
             // Sync slider if exists (fry slider exists, pos slider gone)
