@@ -520,8 +520,9 @@ canvas:active {
     font-weight: 500;
 }
 
-/* Show Warning on Screens narrower than 900px */
-@media (max-width: 900px) {
+/* Show Warning on Screens narrower than 900px OR in Portrait mode */
+@media (max-width: 900px),
+(orientation: portrait) {
     #mobile-warning {
         display: flex;
     }
