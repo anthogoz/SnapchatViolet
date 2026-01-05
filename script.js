@@ -242,20 +242,21 @@ function render() {
                 ctx.fill();
                 ctx.stroke(); // Outline to match selection style
 
+
             } else if (band.type === 'free' && band.text) {
                 const baseSize = 42;
                 const scale = band.scale || 1;
                 const fontSize = baseSize * scale;
+                const metrics = getTextMetrics(ctx, band.text, fontSize);
 
-                ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                const w = ctx.measureText(band.text).width;
-                const h = fontSize;
+                const w = metrics.width;
+                const h = metrics.height;
 
                 const x = (band.x * CANVAS_WIDTH) - (w / 2) - 10;
-                const y = (band.y * CANVAS_HEIGHT) - (fontSize / 2) - 5;
+                const y = (band.y * CANVAS_HEIGHT) - (h / 2) - 10;
 
                 const boxW = w + 20;
-                const boxH = fontSize + 10;
+                const boxH = h + 20;
 
                 // Outline
                 ctx.strokeRect(x, y, boxW, boxH);
@@ -592,13 +593,13 @@ function renderBandsList() {
             headerHTML = `
                 <div style="display: flex; gap: 10px; align-items: center; flex: 1;">
                     <span style="font-size: 1.4rem;">${icon}</span>
-                    <input type="text" 
+                    <textarea 
                         class="band-input" 
-                        value="${band.text}" 
                         placeholder="Votre texte..." 
                         oninput="window.appHandlers.updateText('${band.id}', this.value)"
-                        style="width: 100%;"
-                    >
+                        style="width: 100%; resize: vertical; min-height: 38px; font-family:inherit;"
+                        rows="1"
+                    >${band.text}</textarea>
                 </div>
             `;
         }
@@ -697,18 +698,16 @@ function handleMouseDown(e) {
                 const fontSize = baseSize * scale;
 
                 ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                const w = ctx.measureText(band.text).width;
-                // Handle Pos: Bottom Right of Box
+                const metrics = getTextMetrics(ctx, band.text, fontSize);
+                const w = metrics.width;
+                const h = metrics.height;
+
                 const cx = band.x * CANVAS_WIDTH;
                 const cy = band.y * CANVAS_HEIGHT;
 
-                // Box definition from render:
-                // x = cx - w/2 - 10;
-                // BoxW = w + 20;
-                // Right = Left + Width = cx + w/2 + 10.
-                // Bottom = cy + fontSize/2 + 5.
+                // Handle Pos: Bottom Right of Box
                 handleX = cx + w / 2 + 10;
-                handleY = cy + fontSize / 2 + 5;
+                handleY = cy + h / 2 + 10;
             }
 
             if (handleX !== undefined) {
@@ -736,10 +735,14 @@ function handleMouseDown(e) {
         if (band.type === 'free') {
             // Free Text Hit Test
             if (band.text) {
-                ctx.font = fontFree;
-                const metrics = ctx.measureText(band.text);
+                const baseSize = 42;
+                const scale = band.scale || 1;
+                const fontSize = baseSize * scale;
+                ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+
+                const metrics = getTextMetrics(ctx, band.text, fontSize);
                 const width = metrics.width;
-                const height = 42;
+                const height = metrics.height;
 
                 const cx = band.x * CANVAS_WIDTH;
                 const cy = band.y * CANVAS_HEIGHT;
@@ -831,12 +834,16 @@ function handleMouseMove(e) {
                     const scale = band.scale || 1;
                     const fontSize = baseSize * scale;
                     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                    const w = ctx.measureText(band.text).width;
+
+                    const metrics = getTextMetrics(ctx, band.text, fontSize);
+                    const w = metrics.width;
+                    const h = metrics.height;
+
                     // Handle Pos: Bottom Right of Box
                     const cx = band.x * CANVAS_WIDTH;
                     const cy = band.y * CANVAS_HEIGHT;
                     handleX = cx + w / 2 + 10;
-                    handleY = cy + fontSize / 2 + 5;
+                    handleY = cy + h / 2 + 10;
                 }
 
                 if (handleX !== undefined) {
@@ -1029,83 +1036,94 @@ function getEmojiHex(emoji) {
     return points.filter(p => p !== 'fe0f').join('-');
 }
 
+// Helper to measure text (multiline + emojis)
+function getTextMetrics(ctx, text, fontSize) {
+    if (!text) return { width: 0, height: 0, lines: [] };
+
+    // Split lines
+    const rawLines = text.split('\n');
+    const lines = [];
+    let maxWidth = 0;
+
+    // Line Height Factor
+    const lineHeight = fontSize * 1.2;
+
+    for (const lineStr of rawLines) {
+        // Segment
+        const segments = Array.from(segmenter.segment(lineStr)).map(s => s.segment);
+        const parts = [];
+        let lineWidth = 0;
+
+        for (const seg of segments) {
+            if (isEmoji(seg)) {
+                const dim = fontSize * 1.05;
+                parts.push({ type: 'emoji', val: seg, width: dim });
+                lineWidth += dim;
+            } else {
+                const w = ctx.measureText(seg).width;
+                parts.push({ type: 'text', val: seg, width: w });
+                lineWidth += w;
+            }
+        }
+
+        lines.push({ parts, width: lineWidth });
+        if (lineWidth > maxWidth) maxWidth = lineWidth;
+    }
+
+    const totalHeight = lines.length * lineHeight;
+    return { width: maxWidth, height: totalHeight, lines, lineHeight };
+}
+
 function drawTextWithEmojis(ctx, text, x, y, fontSize) {
     if (!text) return;
 
-    // Segment text by graphemes (keeps emoji sequences together)
-    const segments = Array.from(segmenter.segment(text)).map(s => s.segment);
+    const metrics = getTextMetrics(ctx, text, fontSize);
 
-    // 1. Measure Total Width to Center
-    let totalWidth = 0;
-    const parts = []; // { type: 'text'|'emoji', val: string, width: num }
+    // Vertical centering
+    // y is center.
+    // Start Y = y - totalHeight / 2.
+    // First line center Y = StartY + lineHeight / 2.
+    // Or simpler: StartY = y - (metrics.height / 2) + (metrics.lineHeight / 2) ?
+    // Let's settle on: we draw each line with baseline='middle'.
+    // Top of block = y - metrics.height / 2.
+    // Line 1 center = Top + lineHeight / 2.
 
-    // Ensure font size is set for measurement
-    // We assume caller has set style (bold, family), we just set size
-    // Actually caller should set full font string.
-    // But we need to measure.
-    // Let's assume the context already has the correct font set by caller? 
-    // No, `ctx.measureText` relies on current state.
-    // Caller sets `ctx.font = ...` before calling.
-    // But `fontSize` argument implies we set it?
-    // Let's let the caller set the properties, but we might need to know size for emoji scaling.
-    // So we assume `ctx.font` is already correct! 
-    // But wait, we need `fontSize` for emoji image size. 
+    const startY = y - (metrics.height / 2) + (metrics.lineHeight / 2);
 
-    for (const seg of segments) {
-        if (isEmoji(seg)) {
-            const dim = fontSize * 1.05; // Emojis slightly larger
-            parts.push({ type: 'emoji', val: seg, width: dim });
-            totalWidth += dim;
-        } else {
-            const w = ctx.measureText(seg).width;
-            parts.push({ type: 'text', val: seg, width: w });
-            totalWidth += w;
-        }
-    }
-
-    // 2. Alignment Logic (Center)
-    // We strictly use Center alignment for now as per app design
-    let currentX = x - (totalWidth / 2);
-
-    // 3. Draw Loop
     const savedAlign = ctx.textAlign;
     const savedBaseline = ctx.textBaseline;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    // We draw parts one by one from left to right starting at `currentX`
 
-    for (const part of parts) {
-        if (part.type === 'text') {
-            ctx.fillStyle = "#ffffff";
-            // Shadow is already handled by context state if set by caller
-            ctx.fillText(part.val, currentX, y);
-        } else {
-            // Draw Emoji
-            const hex = getEmojiHex(part.val);
-            const cacheKey = `apple-${hex}`;
+    metrics.lines.forEach((line, index) => {
+        const lineY = startY + (index * metrics.lineHeight);
 
-            if (emojiCache[cacheKey]) {
-                if (emojiCache[cacheKey].complete && emojiCache[cacheKey].naturalWidth !== 0) {
-                    const img = emojiCache[cacheKey];
-                    // Draw centered vertically at y
-                    // If height is part.width (square)
-                    ctx.drawImage(img, currentX, y - part.width / 2, part.width, part.width);
-                }
+        // Center line horizontally
+        let currentX = x - (line.width / 2);
+
+        for (const part of line.parts) {
+            if (part.type === 'text') {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText(part.val, currentX, lineY);
             } else {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.src = `https://cdn.jsdelivr.net/npm/emoji-datasource-apple@14.0.0/img/apple/64/${hex}.png`;
-                emojiCache[cacheKey] = img;
-                img.onload = () => {
-                    // Force re-render once loaded
-                    render();
-                };
-            }
-        }
-        currentX += part.width;
-    }
+                const hex = getEmojiHex(part.val);
+                const cacheKey = `apple-${hex}`;
 
-    // Restore
+                if (emojiCache[cacheKey] && emojiCache[cacheKey].complete && emojiCache[cacheKey].naturalWidth !== 0) {
+                    const img = emojiCache[cacheKey];
+                    ctx.drawImage(img, currentX, lineY - part.width / 2, part.width, part.width);
+                } else if (!emojiCache[cacheKey]) {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = `https://cdn.jsdelivr.net/npm/emoji-datasource-apple@14.0.0/img/apple/64/${hex}.png`;
+                    emojiCache[cacheKey] = img;
+                    img.onload = () => render();
+                }
+            }
+            currentX += part.width;
+        }
+    });
+
     ctx.textAlign = savedAlign;
     ctx.textBaseline = savedBaseline;
 }
