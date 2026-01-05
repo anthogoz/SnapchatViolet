@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnapchatViolet</title>
+    <link rel="icon" type="image/png" href="media/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <meta name="description" content="Créez des faux screenshots Snapchat avec effet deep-fried réaliste.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="app-layout">
+        <!-- Sidebar Controls -->
+        <aside class="controls-panel">
+            <header class="app-header">
+                <h1 class="logo-text">
+                    <img src="media/logo.png" alt="Logo" class="app-logo-img">
+                    SnapchatViolet
+                </h1>
+                <p class="subtitle">Générateur de shitpost de qualité</p>
+            </header>
+
+            <div class="scrollable-content">
+                <!-- Upload Section -->
+                <section class="control-section">
+                    <h2>Image Source</h2>
+                    <label for="imageUpload" class="file-upload-btn">
+                        <span class="icon">📷</span> Charger une photo
+                    </label>
+                    <input type="file" id="imageUpload" accept="image/*">
+
+                    <div class="slider-group" style="margin-top: 15px;">
+                        <div class="slider-header">
+                            <label for="zoomSlider">Zoom</label>
+                            <span id="zoomValue" class="value-badge">100%</span>
+                        </div>
+                        <input type="range" id="zoomSlider" min="100" max="300" value="100" disabled>
+                    </div>
+                </section>
+
+                <!-- Text Bands Section -->
+                <section class="control-section">
+                    <div class="section-header">
+                        <h2>Ajout</h2>
+                    </div>
+
+                    <!-- Add Menu -->
+                    <div class="add-menu-container">
+                        <button id="mainAddBtn" class="action-btn small-btn">➕ Ajouter</button>
+                        <div id="addOptions" class="add-options hidden">
+                            <button id="addBandBtn" class="option-btn">
+                                <span class="opt-icon">⬛</span>
+                                <span>Bande</span>
+                            </button>
+                            <button id="addTextBtn" class="option-btn">
+                                <span class="opt-icon">🅰️</span>
+                                <span>Libre</span>
+                            </button>
+                            <button id="addStickerBtn" class="option-btn">
+                                <span class="opt-icon">🖼️</span>
+                                <span>Image</span>
+                            </button>
+                        </div>
+                        <input type="file" id="stickerUpload" accept="image/*" class="hidden">
+                    </div>
+                    <div id="bandsContainer" class="bands-list">
+                        <!-- Les contrôles de bandes seront injectés ici par JS -->
+                        <div class="empty-state">Aucune bande de texte ajoutée.</div>
+                    </div>
+                </section>
+
+                <!-- Deep Fry Section -->
+                <section class="control-section">
+                    <h2>Compression Deep Fried</h2>
+                    <div class="slider-group">
+                        <div class="slider-header">
+                            <label for="frySlider">Niveau de pourriture</label>
+                            <span id="fryValueDisplay" class="value-badge">10</span>
+                        </div>
+                        <input type="range" id="frySlider" min="0" max="20" value="10" step="1">
+                        <div class="slider-labels">
+                            <span>Clean</span>
+                            <span>Destroyed</span>
+                        </div>
+                    </div>
+
+                    <div class="slider-group" style="margin-top: 15px;">
+                        <div class="slider-header">
+                            <label for="tintSlider">Force Violet</label>
+                            <span id="tintValueDisplay" class="value-badge">20%</span>
+                        </div>
+                        <input type="range" id="tintSlider" min="0" max="100" value="20" step="1">
+                        <div class="slider-labels">
+                            <span>Neutre</span>
+                            <span>Violet</span>
+                        </div>
+                    </div>
+                    <p class="info-text">Plus le niveau est élevé, plus l'image sera re-compressée (artefacts JPEG).</p>
+                </section>
+            </div>
+
+            <!-- Footer Actions -->
+            <footer class="controls-footer">
+                <p style="text-align: center; font-size: 0.8rem; color: #666; margin-bottom: 12px;">Développé avec 💜
+                    par Lnkhey <span style="opacity: 0.5; margin-left: 5px;">v1.0.0</span></p>
+                <button id="downloadBtn" class="action-btn">
+                    <span class="icon">⬇</span> Télécharger
+                </button>
+            </footer>
+        </aside>
+
+        <!-- Preview Area -->
+        <main class="preview-stage">
+            <div class="canvas-container">
+                <canvas id="editorCanvas"></canvas>
+                <div id="loadingOverlay" class="hidden">
+                    <div class="spinner"></div>
+                    <span>Friture en cours...</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
