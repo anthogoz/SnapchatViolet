@@ -33,7 +33,9 @@ let appState = {
     fryLevel: 10,
     tintLevel: 20, // 0-100
     isFrying: false,
-    isDragging: false
+    isDragging: false,
+    isResizing: false,
+    selectedBandId: null
 };
 
 let dragInfo = {
@@ -167,25 +169,24 @@ function render() {
         } else if (item.type === 'free') {
             // Free Floating Text
             if (item.text) {
-                const fontSize = 42;
+                const fontSize = 42 * (item.scale || 1);
                 ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
                 const x = item.x * CANVAS_WIDTH;
                 const y = item.y * CANVAS_HEIGHT;
 
-                // Shadow / Outline for readability
-                ctx.shadowColor = "rgba(0,0,0,0.8)";
+                // Shadow for visibility
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
                 ctx.shadowBlur = 4;
-                ctx.shadowOffsetX = 2;
-                ctx.shadowOffsetY = 2;
+                ctx.fillStyle = 'white';
 
                 // Use new Emoji Drawer
                 drawTextWithEmojis(ctx, item.text, x, y, fontSize);
 
                 // Reset shadow
-                ctx.shadowColor = "transparent";
+                ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
                 ctx.shadowOffsetX = 0;
                 ctx.shadowOffsetY = 0;
@@ -210,6 +211,74 @@ function render() {
             }
         }
     });
+
+    // 3. Selection Overlay
+    if (appState.selectedBandId) {
+        const band = appState.bands.find(b => b.id === appState.selectedBandId);
+        if (band) {
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 3;
+
+            if (band.type === 'sticker' && band.image) {
+                const width = CANVAS_WIDTH * band.scale;
+                const height = width * (band.image.height / band.image.width);
+                const x = (band.x * CANVAS_WIDTH) - (width / 2);
+                const y = (band.y * CANVAS_HEIGHT) - (height / 2);
+
+                // Outline
+                ctx.strokeRect(x - 2, y - 2, width + 4, height + 4);
+
+                // Resize Handle (Bottom Right)
+                const handleX = x + width;
+                const handleY = y + height;
+
+                ctx.beginPath();
+                ctx.arc(handleX, handleY, 8, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.stroke(); // Outline to match selection style
+
+            } else if (band.type === 'free' && band.text) {
+                const baseSize = 42;
+                const scale = band.scale || 1;
+                const fontSize = baseSize * scale;
+
+                ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                const w = ctx.measureText(band.text).width;
+                const h = fontSize;
+
+                const x = (band.x * CANVAS_WIDTH) - (w / 2) - 10;
+                const y = (band.y * CANVAS_HEIGHT) - (fontSize / 2) - 5;
+
+                const boxW = w + 20;
+                const boxH = fontSize + 10;
+
+                // Outline
+                ctx.strokeRect(x, y, boxW, boxH);
+
+                // Resize Handle (Bottom Right)
+                const handleX = x + boxW;
+                const handleY = y + boxH;
+
+                ctx.beginPath();
+                ctx.arc(handleX, handleY, 8, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.stroke();
+
+            } else if (band.type === 'band') {
+                const bandHeight = Math.max(30, CANVAS_HEIGHT * BAND_HEIGHT_RATIO);
+                const yPos = band.y * (CANVAS_HEIGHT - bandHeight);
+                ctx.strokeRect(0, yPos, CANVAS_WIDTH, bandHeight);
+            }
+
+            ctx.restore();
+        }
+    }
 }
 
 
@@ -253,23 +322,21 @@ async function startDeepFry() {
 
             } else if (band.type === 'free') {
                 if (band.text) {
-                    const fontSize = 42;
+                    const fontSize = 42 * (band.scale || 1);
                     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
 
                     const x = band.x * CANVAS_WIDTH;
                     const y = band.y * CANVAS_HEIGHT;
 
-                    ctx.shadowColor = "rgba(0,0,0,0.8)";
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
                     ctx.shadowBlur = 4;
-                    ctx.shadowOffsetX = 2;
-                    ctx.shadowOffsetY = 2;
+                    ctx.fillStyle = 'white';
 
-                    // Use new Emoji Drawer
                     drawTextWithEmojis(ctx, band.text, x, y, fontSize);
 
-                    ctx.shadowColor = "transparent";
+                    ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                     ctx.shadowOffsetX = 0;
                     ctx.shadowOffsetY = 0;
@@ -450,6 +517,7 @@ function addBand() {
         y: 0.5,
         fryScore: 0.5 // Default to 50% fried
     });
+    appState.selectedBandId = id;
     renderBandsList();
     render();
 }
@@ -462,8 +530,10 @@ function addText() {
         text: "Texte",
         x: 0.5,
         y: 0.5,
+        scale: 1.0, // Default scale
         fryScore: 0.5
     });
+    appState.selectedBandId = id;
     renderBandsList();
     render();
 }
@@ -509,107 +579,73 @@ function renderBandsList() {
         if (band.type === 'free') icon = '🅰️';
         if (band.type === 'sticker') icon = '🖼️';
 
-        let controlsHTML = '';
-
+        // Header: Icon + Input/Label + Delete
+        let headerHTML = '';
         if (band.type === 'sticker') {
-            controlsHTML = `
-                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 5px;">
-                    <span style="font-size: 1.2rem;">${icon}</span>
-                    <span style="font-size: 14px; color: #ccc;">Image</span>
+            headerHTML = `
+                <div style="display: flex; gap: 10px; align-items: center; flex: 1;">
+                    <span style="font-size: 1.4rem;">${icon}</span>
+                    <span style="font-size: 14px; color: #ccc; font-weight:bold;">Image Sticker</span>
                 </div>
-                <div class="band-row" style="align-items: center;">
-                    <span style="font-size: 12px; color: #666;">📏</span>
-                    <input type="range" 
-                        min="0.1" max="1.5" step="0.05" 
-                        value="${band.scale}" 
-                        title="Taille"
-                        oninput="window.appHandlers.updateSize('${band.id}', this.value)"
-                    >
-                    <button class="delete-btn" onclick="window.appHandlers.remove('${band.id}')">🗑</button>
-                </div>
-             `;
+            `;
         } else {
-            // Text or Band
-            controlsHTML = `
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <span style="font-size: 1.2rem;">${icon}</span>
+            headerHTML = `
+                <div style="display: flex; gap: 10px; align-items: center; flex: 1;">
+                    <span style="font-size: 1.4rem;">${icon}</span>
                     <input type="text" 
                         class="band-input" 
                         value="${band.text}" 
                         placeholder="Votre texte..." 
                         oninput="window.appHandlers.updateText('${band.id}', this.value)"
+                        style="width: 100%;"
                     >
-                </div>
-            `;
-            // Add Fry Slider (common to all, but let's keep deletion here too)
-            controlsHTML += `
-                <div class="band-row" style="align-items: center;">
-                    <span style="font-size: 12px; color: #666;">🔥</span>
-                    <input type="range" 
-                        id="slider-${band.id}"
-                        min="0" max="1" step="0.01" 
-                        value="${band.fryScore !== undefined ? band.fryScore : 0.5}" 
-                        title="Niveau de destruction"
-                        oninput="window.appHandlers.updateFry('${band.id}', this.value)"
-                    >
-                    <button class="delete-btn" onclick="window.appHandlers.remove('${band.id}')">🗑</button>
                 </div>
             `;
         }
 
-        // Wait, Sticker also needs Fry Slider!
-        // I should refactor to share Fry Slider.
-        // Let's rewrite cleaner.
+        headerHTML += `<button class="delete-btn" onclick="window.appHandlers.remove('${band.id}')">🗑</button>`;
 
+        // Sliders Area
+        let slidersHTML = '';
+
+        // Size Slider (Sticker only)
         if (band.type === 'sticker') {
-            div.innerHTML = `
-                <div class="band-controls">
-                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 5px;">
-                        <span style="font-size: 1.2rem;">${icon}</span>
-                        <input type="range" style="flex:1"
-                            min="0.1" max="1.5" step="0.05" 
-                            value="${band.scale}" 
-                            title="Taille"
-                            oninput="window.appHandlers.updateSize('${band.id}', this.value)"
-                        >
+            slidersHTML += `
+                <div style="margin-top: 10px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="font-size:12px; color:#aaa;">Taille</span>
                     </div>
-                    <div class="band-row" style="align-items: center;">
-                        <span style="font-size: 12px; color: #666;">🔥</span>
-                        <input type="range" 
-                            min="0" max="1" step="0.01" 
-                            value="${band.fryScore !== undefined ? band.fryScore : 0.5}" 
-                            title="Niveau de destruction"
-                            oninput="window.appHandlers.updateFry('${band.id}', this.value)"
-                        >
-                        <button class="delete-btn" onclick="window.appHandlers.remove('${band.id}')">🗑</button>
-                    </div>
+                    <input type="range" 
+                        min="0.1" max="1.5" step="0.05" 
+                        value="${band.scale}" 
+                        oninput="window.appHandlers.updateSize('${band.id}', this.value)"
+                    >
                 </div>
-             `;
-        } else {
-            div.innerHTML = `
-                <div class="band-controls">
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span style="font-size: 1.2rem;">${icon}</span>
-                        <input type="text" 
-                            class="band-input" 
-                            value="${band.text}" 
-                            placeholder="Votre texte..." 
-                            oninput="window.appHandlers.updateText('${band.id}', this.value)"
-                        >
-                    </div>
-                    <div class="band-row" style="align-items: center;">
-                        <span style="font-size: 12px; color: #666;">🔥</span>
-                        <input type="range" 
-                            min="0" max="1" step="0.01" 
-                            value="${band.fryScore !== undefined ? band.fryScore : 0.5}" 
-                            title="Niveau de destruction"
-                            oninput="window.appHandlers.updateFry('${band.id}', this.value)"
-                        >
-                        <button class="delete-btn" onclick="window.appHandlers.remove('${band.id}')">🗑</button>
-                    </div>
-                </div>
-             `;
+            `;
         }
+
+        // Fry Slider (Everyone)
+        slidersHTML += `
+            <div style="margin-top: 10px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="font-size:12px; color:#aaa;">Destruction 🔥</span>
+                </div>
+                <input type="range" 
+                    min="0" max="1" step="0.01" 
+                    value="${band.fryScore !== undefined ? band.fryScore : 0.5}" 
+                    oninput="window.appHandlers.updateFry('${band.id}', this.value)"
+                >
+            </div>
+        `;
+
+        div.innerHTML = `
+            <div class="band-controls">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    ${headerHTML}
+                </div>
+                ${slidersHTML}
+            </div>
+        `;
         bandsContainer.appendChild(div);
     });
 }
@@ -641,6 +677,54 @@ function handleMouseDown(e) {
     if (e.type === 'touchstart' && e.cancelable) e.preventDefault();
 
     const coords = getCanvasCoordinates(e);
+
+    // 1. Check Resize Handle Hit (Priority)
+    if (appState.selectedBandId) {
+        const band = appState.bands.find(b => b.id === appState.selectedBandId);
+        if (band) {
+            let handleX, handleY;
+
+            if (band.type === 'sticker' && band.image) {
+                const width = CANVAS_WIDTH * band.scale;
+                const height = width * (band.image.height / band.image.width);
+                const x = (band.x * CANVAS_WIDTH) - (width / 2);
+                const y = (band.y * CANVAS_HEIGHT) - (height / 2);
+                handleX = x + width;
+                handleY = y + height;
+            } else if (band.type === 'free' && band.text) {
+                const baseSize = 42;
+                const scale = band.scale || 1;
+                const fontSize = baseSize * scale;
+
+                ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                const w = ctx.measureText(band.text).width;
+                // Handle Pos: Bottom Right of Box
+                const cx = band.x * CANVAS_WIDTH;
+                const cy = band.y * CANVAS_HEIGHT;
+
+                // Box definition from render:
+                // x = cx - w/2 - 10;
+                // BoxW = w + 20;
+                // Right = Left + Width = cx + w/2 + 10.
+                // Bottom = cy + fontSize/2 + 5.
+                handleX = cx + w / 2 + 10;
+                handleY = cy + fontSize / 2 + 5;
+            }
+
+            if (handleX !== undefined) {
+                const dx = coords.x - handleX;
+                const dy = coords.y - handleY;
+                if (dx * dx + dy * dy <= 20 * 20) {
+                    appState.isResizing = true;
+                    dragInfo.target = band.id;
+                    dragInfo.startX = coords.x;
+                    dragInfo.startY = coords.y;
+                    dragInfo.initialScale = band.scale !== undefined ? band.scale : 1.0;
+                    return;
+                }
+            }
+        }
+    }
 
     let hitBand = null;
     const fontFree = "bold 42px Arial, sans-serif";
@@ -699,6 +783,9 @@ function handleMouseDown(e) {
         }
     }
 
+    // Selection Logic
+    appState.selectedBandId = hitBand ? hitBand.id : null;
+
     appState.isDragging = true;
     dragInfo.startX = coords.x;
     dragInfo.startY = coords.y;
@@ -716,14 +803,53 @@ function handleMouseDown(e) {
         dragInfo.initialY = appState.imgY;
         canvas.style.cursor = 'grabbing';
     }
+
+    render();
 }
 
 function handleMouseMove(e) {
     const coords = getCanvasCoordinates(e);
 
     // Cursor Hover Feedback
-    if (!appState.isDragging) {
+    if (!appState.isDragging && !appState.isResizing) {
         let hover = false;
+
+        // Check handle hover first
+        if (appState.selectedBandId) {
+            const band = appState.bands.find(b => b.id === appState.selectedBandId);
+            if (band) {
+                let handleX, handleY;
+                if (band.type === 'sticker' && band.image) {
+                    const width = CANVAS_WIDTH * band.scale;
+                    const height = width * (band.image.height / band.image.width);
+                    const x = (band.x * CANVAS_WIDTH) - (width / 2);
+                    const y = (band.y * CANVAS_HEIGHT) - (height / 2);
+                    handleX = x + width;
+                    handleY = y + height;
+                } else if (band.type === 'free' && band.text) {
+                    const baseSize = 42;
+                    const scale = band.scale || 1;
+                    const fontSize = baseSize * scale;
+                    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+                    const w = ctx.measureText(band.text).width;
+                    // Handle Pos: Bottom Right of Box
+                    const cx = band.x * CANVAS_WIDTH;
+                    const cy = band.y * CANVAS_HEIGHT;
+                    handleX = cx + w / 2 + 10;
+                    handleY = cy + fontSize / 2 + 5;
+                }
+
+                if (handleX !== undefined) {
+                    const dx = coords.x - handleX;
+                    const dy = coords.y - handleY;
+                    if (dx * dx + dy * dy <= 15 * 15) {
+                        canvas.style.cursor = 'nwse-resize';
+                        return;
+                    }
+                }
+            }
+        }
+
         const fontFree = "bold 42px Arial, sans-serif";
 
         for (let i = appState.bands.length - 1; i >= 0; i--) {
@@ -762,6 +888,24 @@ function handleMouseMove(e) {
 
         if (!hover) {
             canvas.style.cursor = appState.image ? 'grab' : 'default';
+        }
+        return;
+    }
+
+    // Resizing Logic
+    if (appState.isResizing) {
+        if (e.type === 'touchmove') e.preventDefault();
+        const band = appState.bands.find(b => b.id === dragInfo.target);
+        if (band) {
+            const delta = coords.x - dragInfo.startX; // Drag right to increase
+            // Sensitivity: 200px = +1.0 scale
+            const newScale = dragInfo.initialScale + (delta / 200);
+            band.scale = Math.max(0.05, Math.min(3.0, newScale));
+            render();
+
+            // Sync UI slider if possible (but we don't have direct ref, rely on render re-creating UI? No renderBandsList not called)
+            // But we can update the slider value if it exists in DOM
+            // This is optional but nice.
         }
         return;
     }
@@ -808,6 +952,14 @@ function handleMouseMove(e) {
 }
 
 function handleMouseUp() {
+    if (appState.isResizing) {
+        appState.isResizing = false;
+        canvas.style.cursor = 'default';
+        if (appState.fryLevel > 0) debouncedFry();
+        renderBandsList(); // Sync UI slider
+        return;
+    }
+
     if (appState.isDragging) {
         appState.isDragging = false;
         canvas.style.cursor = 'grab';
@@ -977,6 +1129,7 @@ function handleStickerUpload(e) {
                 scale: 0.3, // Default scale
                 fryScore: 0.5
             });
+            appState.selectedBandId = id;
             renderBandsList();
             render();
             // Hide menu
